@@ -1,0 +1,168 @@
+---
+title: "Heath and Economic Effects of Severe Weather"
+author: "Aditya Taunk"
+date: '2017-06-25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+## Synopsis
+
+
+## Data Processing
+
+Download data if it's not found in working directory
+```{r}
+if(!file.exists("StormData.csv.bz2")){
+  download.file(
+    "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",
+    "StormData.csv.bz2"
+  )
+}
+```
+
+Read it into memory
+```{r}
+library(data.table)
+data <- fread("bzcat StormData.csv.bz2")
+```
+
+We are interested in the data broken down by event types
+```{r}
+evtypes <- data[ , 
+  list(
+    frequency = .N,
+    injuries = sum(INJURIES), 
+    fatalities = sum(FATALITIES),
+    property.damage = sum(PROPDMG),
+    crop.damage = sum(CROPDMG)
+  ),
+  by = EVTYPE
+]
+```
+
+### Harm
+
+Create a column which indicates how much harm a particular event type has caused.
+Here harm is defined as the sum of the fractions of injuries, fatalities, property 
+and crop damage the event type has caused.
+```{r}
+totals <- evtypes[,
+  list(
+    injuries = sum(injuries),
+    fatalities = sum(fatalities),
+    property.damage = sum(property.damage),
+    crop.damage = sum(crop.damage)
+  )
+]
+evtypes[,
+  harm := 
+    injuries/totals$injuries +
+    fatalities/totals$fatalities +
+    property.damage/totals$property.damage +
+    crop.damage/totals$crop.damage
+]
+```
+
+Sort event types by amount of harm and rank them by the type of harm
+```{r}
+evtypes <-evtypes[order(-harm)]
+evranks <- evtypes[,
+  list(
+    EVTYPE,
+    injuries = rank(-injuries, ties.method="first"),
+    fatalities = rank(-fatalities, ties.method="first"),
+    property.damage = rank(-property.damage, ties.method="first"),
+    crop.damage = rank(-crop.damage, ties.method="first")
+  )
+]
+```
+
+Lets see the top 21 most harmful events. Why 21? because they contain the top 10
+causes for each of the harm types.
+```{r}
+head(evranks, 21)
+```
+
+As seen from the above table, tornados are the leading cause of injuries, fatalities 
+and property damage. They are also a significant cause of crop damage. Also interesting
+to note is that event types like heat seem hazardous to health but not so much for
+property and crops. Conversely, things like hail and thunderstorm winds affect crop
+and property but they affect heath to a lesser extent.
+
+The harm value is a made up value to find the most relavant EVTYPEs. We don't need 
+it anymore.
+```{r}
+evtypes <- evtypes[, !"harm"]
+```
+
+We want to know what percent of the total harm do these 21 account for
+```{r}
+toptypes <- head(evtypes, 21)
+toptypes[,
+  list(
+    injuries = sum(injuries)/totals$injuries,
+    fatalities = sum(fatalities)/totals$fatalities,
+    property.damage = sum(property.damage)/totals$property.damage,
+    crop.damage = sum(crop.damage)/totals$crop.damage
+  )
+]
+```
+
+So our subset accounts for a majority of the harm reported in the data (at least 
+86%). So now we will mostly focus on those 21 EVTYPEs. We will add a row to the 
+subset summing up the contributions from the other EVTYPEs.
+```{r}
+others <- evtypes[!EVTYPE %in% toptypes$EVTYPE,]
+otherstotal <- others[,
+  list(
+    EVTYPE = "OTHER",
+    frequency = sum(frequency),
+    injuries = sum(injuries),
+    fatalities = sum(fatalities),
+    property.damage = sum(property.damage),
+    crop.damage = sum(crop.damage)
+  )
+]
+evtypes <- rbind(toptypes,otherstotal)
+options(width = 120)
+evtypes
+```
+
+Here is a plot of the above data separated by the type of harm
+```{r}
+par(mar=c(2,3,2,1))
+layout(matrix(c(1,2,5,3,4,5),2,3,byrow=T))
+library(colorRamps)
+cols <- primary.colors(22)
+
+with(evtypes, barplot(injuries+1, main="Injuries", log="y", yaxt="n", col=cols))
+axis(2, at=c(6,51,501,5001,50001), label=c(5,50,500,5000,50000))
+
+with(evtypes, barplot(fatalities+1, main="Fatalities", log="y", yaxt="n", col=cols))
+axis(2, at=c(1,6,51,501,5001), label=c(0,5,50,500,5000))
+
+with(evtypes, barplot(property.damage+1, main="Property Damage ($)", yaxt="n", log="y", col=cols))
+axis(2, at=c(6,51,501,10001,1000001), label=c(5,50,500,1e4,1000000))
+
+with(evtypes, barplot(crop.damage+1, main="Crop Damage ($)", log="y", yaxt="n", col=cols))
+axis(2, at=c(1,6,51,501,10001,500001), label=c(0,5,50,500,1e4,500000))
+
+plot(1, 1, type="n", ann=FALSE, yaxt='n', xaxt='n')
+legend("center", evtypes$EVTYPE, fill=cols, box.lwd=0)
+```
+
+
+
+
+
+
+## Results
+
+
+
+
+
