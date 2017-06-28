@@ -27,7 +27,10 @@ if(!file.exists("StormData.csv.bz2")){
 Read it into memory
 ```{r}
 library(data.table)
-data <- fread("bzcat StormData.csv.bz2")
+data <- fread(
+  "bzcat StormData.csv.bz2",
+  na.strings = ""
+)
 ```
 
 We are interested in the data broken down by event types
@@ -43,6 +46,8 @@ evtypes <- data[ ,
   by = EVTYPE
 ]
 ```
+
+
 
 ### Harm
 
@@ -155,8 +160,106 @@ plot(1, 1, type="n", ann=FALSE, yaxt='n', xaxt='n')
 legend("center", evtypes$EVTYPE, fill=cols, box.lwd=0)
 ```
 
+### Tornadoes
 
+As seen before, tornadoes are the leading cause for three of the four harm types.
+So lets examine them more closely. 
+```{r}
+tornadoes <- data[EVTYPE == "TORNADO",]
+```
 
+Here are tornadoes' contribution to total harm
+```{r}
+tornadoes[,
+  list(
+    injuries = sum(INJURIES)/totals$injuries,
+    fatalities = sum(FATALITIES)/totals$fatalities,
+    property.damage = sum(PROPDMG)/totals$property.damage,
+    crop.damage = sum(CROPDMG)/totals$crop.damage
+  )
+]
+```
+
+Note that the majority of injuries due to severe weather are caused by tornadoes.
+
+Here is a breakdown of injuries by the fujita scale. 
+```{r}
+fujita.breakdown <- tornadoes[
+  order(F),
+  list(
+    frequency = .N,
+    injuries = sum(INJURIES),
+    injuries.per.tornado = sum(INJURIES)/.N,
+    factor.of.total = sum(INJURIES)/evtypes[EVTYPE=="TORNADO",injuries]
+  ),
+  by = F
+]
+fujita.breakdown
+```
+
+Unsurprisingly, milder tornadoes are more frequent and severe tornadoes cause more
+injuries per tornado on avergae. Note that tornadoes with F-scale 4 cause the most
+number of injuries in total (33616) accounting for more than 36% of all injuries
+due to tornadoes.
+
+Let's see where these tornado's are located
+```{r}
+par(mar=c(1,1,2.5,1))
+with(
+  tornadoes, 
+  smoothScatter(
+    -LONGITUDE, LATITUDE, 
+    xlim=c(-12600,-6500), ylim=c(2300,5200),
+    xaxt='n', yaxt='n',
+    xlab='', ylab='',
+    main="Locations of Tornadoes"
+  )
+)
+```
+
+You can clearly see the shape of the Continental USA from the plot above which shows
+the locations of the tornadoes reported in the data. For some reason most of the
+tornadoes are in the Eastern half of the country.
+
+### Trends
+
+We want to find out how things have changed over time. And again we want to look 
+at only the top 21 EVTYPEs.
+```{r}
+dates <-  as.Date(data$BGN_DATE, format="%m/%d/%Y")
+data[, year := as.integer(format(dates, format="%Y"))]
+evtypesbyyear <- rbind(
+  data[
+    EVTYPE %in% toptypes$EVTYPE,
+    list(
+      injuries = sum(INJURIES),
+      fatalities = sum(FATALITIES),
+      property.damage = sum(PROPDMG),
+      crop.damage = sum(CROPDMG)
+    ),
+    by = .(EVTYPE, year)
+  ],
+  data[
+    !EVTYPE %in% toptypes$EVTYPE,
+    list(
+      EVTYPE = "OTHER",
+      injuries = sum(INJURIES),
+      fatalities = sum(FATALITIES),
+      property.damage = sum(PROPDMG),
+      crop.damage = sum(CROPDMG)
+    ),
+    by = year
+  ]
+)
+evtypesbyyear[order(year, match(EVTYPE, evtypes$EVTYPE))]
+```
+
+This plot shows the evolution of EVTYPEs over the years
+```{r}
+
+library(ggplot2)
+
+```
 
 
 
